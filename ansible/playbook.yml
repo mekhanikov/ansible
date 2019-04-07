@@ -1,0 +1,41 @@
+---
+- hosts: all
+  gather_facts: no
+  become: true
+  pre_tasks:
+  - name: 'install python2'
+    raw: sudo apt-get -y update && sudo apt-get -y install python
+  - name: Gathering facts
+    setup:
+  vars:
+    - oracle_java_set_as_default: yes
+    - mysql_enabled_on_startup: yes
+    - mysql_databases:
+      - name: irc_log_bot
+        collation: utf8_general_ci
+        encoding: utf8
+        replicate: 1
+    - mysql_users:
+      - name: irc_log_bot
+        host: "%"
+        password: hgf
+        priv: "irc_log_bot.*:ALL"
+    - jenkins_version: "2.138.2"
+    - jenkins_url_prefix: "/jenkins"
+    - sonar_version: 6.7.5
+    - sonar_web_context: '/sonar'
+    - sonar_plugins:
+      - { name: "sonar-cobertura-plugin", version: "2.0.0", commercial: false, url: "https://github.com/galexandre/sonar-cobertura/releases/download/2.0/sonar-cobertura-plugin-2.0.jar"}
+      - { name: "sonar-java-plugin", version: "5.8", commercial: false, url: "https://binaries.sonarsource.com/Distribution/sonar-java-plugin/sonar-java-plugin-5.8.0.15699.jar"}
+    - sonar_admin_password : "admin123"
+    - sonar_jenkins_token : "35r9f9084d66a90c0969134c0y5ac7u3db623b43"
+    - mysql_user_password: p
+    - mysql_root_password: p
+    - rocket_chat_tarball_validate_remote_cert: false
+  roles:
+    - ansible-docker
+    - oracle-java
+    - ansible-role-mysql
+    - jenkins
+    - ansible-role-sonar
+    - ansible-role-nginx

@@ -1,0 +1,12 @@
+# editor
+
+.vscode
+
+# app
+
+lxc/.vagrant/
+tractogitlab/.classpath
+tractogitlab/.project
+tractogitlab/.settings/
+tractogitlab/target/
+ansible/playbook.retry

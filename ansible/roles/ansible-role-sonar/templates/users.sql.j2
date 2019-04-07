@@ -1,0 +1,2 @@
+insert ignore into  user_tokens (login, name, token_hash, created_at) VALUES ('admin', 'jenkins_token', SHA2('{{ sonar_jenkins_token }}', 384), UNIX_TIMESTAMP() * 1000);
+UPDATE users SET crypted_password=SHA1(CONCAT('--', salt, '--', '{{ sonar_admin_password }}', '--')) WHERE id='1';

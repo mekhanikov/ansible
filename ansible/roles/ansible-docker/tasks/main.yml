@@ -1,0 +1,141 @@
+---
+
+- name: Disable pinned Docker version
+  file:
+    dest: "/etc/apt/preferences.d/docker-ce.pref"
+    state: "absent"
+  when: docker_version == "" or docker_version == "latest"
+
+- name: Pin Docker version
+  template:
+    src: "etc/apt/preferences.d/docker-ce.pref.j2"
+    dest: "/etc/apt/preferences.d/docker-ce.pref"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when:
+    - docker_version and docker_version != "latest"
+
+- name: Install role dependencies
+  apt:
+    name: "{{ item }}"
+  loop: "{{ docker_package_dependencies }}"
+
+- name: Add Docker's GPG key
+  apt_key:
+    id: "{{ docker_apt_key_id }}"
+    url: "{{ docker_apt_key_server }}"
+
+- name: Configure Docker's APT repository
+  apt_repository:
+    repo: "{{ docker_apt_repository }}"
+    update_cache: True
+
+- name: "sudo dpkg --configure -a (without that 'Install Docker' failed with 'E: Sub-process /usr/bin/dpkg returned an error code (1)')"
+  command: sudo dpkg --configure -a
+
+- name: Install Docker
+  apt:
+    name: "docker-{{ docker_edition }}"
+
+- name: Remove Upstart config file
+  file:
+    path: "/etc/default/docker"
+    state: "absent"
+
+- name: Ensure Docker configuration directories exists
+  file:
+    path: "{{ item }}"
+    state: "directory"
+    owner: "root"
+    group: "root"
+    mode: "0755"
+  loop:
+    - "/etc/docker"
+    - "/etc/systemd/system/docker.service.d"
+
+- name: Configure Docker daemon options
+  template:
+    src: "etc/docker/daemon.json.j2"
+    dest: "/etc/docker/daemon.json"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: docker_daemon_default_options or docker_daemon_options
+
+- name: Generate customized environment systemd unit file
+  template:
+    src: "etc/systemd/system/docker.service.d/environment.conf.j2"
+    dest: "/etc/systemd/system/docker.service.d/environment.conf"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  register: docker_register_systemd_customized
+  when: docker_daemon_environment
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: True
+  notify: ["Restart Docker"]
+  when:
+    - docker_register_systemd_customized is defined
+    - docker_register_systemd_customized is changed
+
+- name: Add user(s) to "docker" group
+  user:
+    name: "{{ item }}"
+    groups: "docker"
+    append: True
+  loop: "{{ docker_users }}"
+
+- name: Install Python for managing Docker login credentials
+  apt:
+    name: "python"
+  when: docker_registries
+
+- name: Install docker-py for managing Docker login credentials
+  pip:
+    name: "docker-py"
+  when: docker_registries
+
+- name: Manage login credentials for 1 or more Docker registries
+  docker_login:
+    registry_url: "{{ item.registry_url | default(omit) }}"
+    state: "{{ item.state | default('present') }}"
+    username: "{{ item.username }}"
+    password: "{{ item.password }}"
+    email: "{{ item.email | default(omit)}}"
+    reauthorize: "{{ item.reauthorize | default(omit) }}"
+  loop: "{{ docker_registries }}"
+  when:
+    - item.username is defined and item.username
+    - item.password is defined and item.password
+  become_user: "{{ item.system_user | default(omit) }}"
+
+- name: Remove Docker Compose
+  file:
+    path: "/usr/local/bin/docker-compose"
+    state: "absent"
+  when: not docker_install_docker_compose
+
+- name: Install Docker Compose
+  get_url:
+    url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-Linux-x86_64"
+    dest: "/usr/local/bin/docker-compose"
+    force: True
+    owner: "root"
+    group: "root"
+    mode: "0755"
+  when: docker_install_docker_compose
+
+- name: Manage Docker cron tasks
+  cron:
+    name: "{{ item.name }}"
+    state: "{{ item.state | default('present') }}"
+    job: "{{ item.job }}"
+    minute: "{{ item.schedule[0] }}"
+    hour: "{{ item.schedule[1] }}"
+    day: "{{ item.schedule[2] }}"
+    month: "{{ item.schedule[3] }}"
+    weekday: "{{ item.schedule[4] }}"
+  loop: "{{ docker_cron_tasks }}"
